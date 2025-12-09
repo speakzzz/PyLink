@@ -291,6 +291,7 @@ class PyLinkNetworkCore(structures.CamelCaseToSnakeCase):
 
                 handler = PyLinkChannelLogger(self, channel, level=level)
                 self.loghandlers.append(handler)
+                self.loghandlers.append(handler)
                 log.addHandler(handler)
 
     def _init_vars(self):
@@ -1183,7 +1184,7 @@ class PyLinkNetworkCoreWithUtils(PyLinkNetworkCore):
         """
         origstring = isinstance(modes, str)
 
-        # If the query is a string, we have to parse it first.
+        # If the original query is a string, we have to parse it first.
         if origstring:
             modes = self.parse_modes(target, modes.split(" "))
 
@@ -2160,7 +2161,10 @@ class IRCNetwork(PyLinkNetworkCoreWithUtils):
         # Once we're done here, shut down the write part of the socket.
         if self._socket:
             log.debug('(%s) _process_queue: shutting down write half of socket %s', self.name, self._socket)
-            self._socket.shutdown(socket.SHUT_WR)
+            try:
+                self._socket.shutdown(socket.SHUT_WR)
+            except OSError:
+                pass
         self._aborted_send.set()
 
     def wrap_message(self, source, target, text):
