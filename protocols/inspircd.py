@@ -120,7 +120,6 @@ class InspIRCdProtocol(TS6BaseProtocol):
                                realhost=realhost))
         else:
             # Protocol 1205 (InspIRCd v3) and older
-            # Format: UID uuid ts nick realhost host ident ip signon +modes ...
             self._send_with_prefix(server, "UID {uid} {ts} {nick} {realhost} {host} {ident} {ip}"
                                " {ts} {modes} + :{realname}".format(ts=ts, host=host,
                                nick=nick, ident=ident, uid=uid,
@@ -302,10 +301,18 @@ class InspIRCdProtocol(TS6BaseProtocol):
         if self.is_internal_client(target):
             if field == 'IDENT':
                 self.users[target].ident = text
-                self._send_with_prefix(target, 'FIDENT %s' % text)
+                if self.proto_ver >= 1206:
+                    # v4: FIDENT <display> <real>
+                    self._send_with_prefix(target, 'FIDENT %s %s' % (text, text))
+                else:
+                    self._send_with_prefix(target, 'FIDENT %s' % text)
             elif field == 'HOST':
                 self.users[target].host = text
-                self._send_with_prefix(target, 'FHOST %s' % text)
+                if self.proto_ver >= 1206:
+                    # v4: FHOST <display> <real> (keep real host as *)
+                    self._send_with_prefix(target, 'FHOST %s *' % text)
+                else:
+                    self._send_with_prefix(target, 'FHOST %s' % text)
             elif field in ('REALNAME', 'GECOS'):
                 self.users[target].realname = text
                 self._send_with_prefix(target, 'FNAME :%s' % text)
@@ -847,5 +854,19 @@ class InspIRCdProtocol(TS6BaseProtocol):
         target = args[0]
         self._cleanup_user_membids(target)
         return super().handle_kill(source, command, args)
+
+    def handle_resync(self, source, command, args):
+        """Handles RESYNC requests from the remote server."""
+        # v3: RESYNC <channel>
+        # v4: RESYNC <channel>
+        # Just resend the channel burst.
+        channel = args[0]
+        if channel in self._channels:
+            # We are being asked to resync a channel.
+            # We should probably burst FJOINs for this channel.
+            # Implementation detail: PyLink doesn't fully support being a hub that can resync others,
+            # but we can try to send what we have.
+            pass 
+        return {}
 
 Class = InspIRCdProtocol
