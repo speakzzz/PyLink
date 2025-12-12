@@ -619,23 +619,14 @@ class InspIRCdProtocol(TS6BaseProtocol):
                 self._channels[channel].modes}
 
     def handle_uid(self, numeric, command, args):
-        if self.proto_ver >= 1206:
-            # v4: uid, nickchanged, nick, realhost, dhost, realuser, duser, ip, signon, +modes
-            uid, ts, nick, realhost, host, realuser, duser, ip, signon = args[0:9]
-            ident = realuser
-            # args[9] is modes, args[10] mode params
-            mode_args = args[9:]
-        else:
-            # v3: uid, ts, nick, realhost, host, ident, ip, signon, +modes
-            uid, ts, nick, realhost, host, ident, ip, signon = args[0:8]
-            mode_args = args[8:]
-
+        uid, ts, nick, realhost, host, ident, ip = args[0:7]
         ts = int(ts)
+
         self._check_nick_collision(nick)
         realname = args[-1]
         self.users[uid] = userobj = User(self, nick, ts, uid, numeric, ident, host, realname, realhost, ip)
 
-        parsedmodes = self.parse_modes(uid, mode_args)
+        parsedmodes = self.parse_modes(uid, [args[8], args[9]])
         self.apply_modes(uid, parsedmodes)
 
         self._check_oper_status_change(uid, parsedmodes)
@@ -785,14 +776,16 @@ class InspIRCdProtocol(TS6BaseProtocol):
             # Channel Metadata
             channel = target_arg
             key = args[2]
-            value = args[3]
+            # Fix for channel metadata if value is missing (unlikely but safe)
+            value = args[3] if len(args) > 3 else ''
             self.call_hooks([channel, 'CHANNEL_METADATA', {'key': key, 'value': value}])
             return
 
         # User Metadata
         uid = target_arg
         key = args[1]
-        value = args[2]
+        # SAFE ACCESS FIX: Default to empty string if value missing
+        value = args[2] if len(args) > 2 else '' 
 
         if key == 'accountname' and uid in self.users:
             self.call_hooks([uid, 'CLIENT_SERVICES_LOGIN', {'text': value}])
@@ -859,7 +852,6 @@ class InspIRCdProtocol(TS6BaseProtocol):
         """Handles RESYNC requests from the remote server."""
         # v3: RESYNC <channel>
         # v4: RESYNC <channel>
-        # Just resend the channel burst.
         channel = args[0]
         if channel in self._channels:
             # We are being asked to resync a channel.
